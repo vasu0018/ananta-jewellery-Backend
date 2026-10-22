@@ -31,7 +31,19 @@ export function createApp() {
   );
   app.use(
     cors({
-      origin: (origin, cb) => cb(null, !origin || env.corsOrigins.includes(origin)),
+      origin: (origin, cb) => {
+        if (!origin || env.corsOrigins.includes(origin)) return cb(null, true);
+        // Dev / LAN: allow phones & other PCs hitting this machine by private IP.
+        if (
+          !env.isProd &&
+          /^http:\/\/(localhost|127\.0\.0\.1|192\.168\.\d{1,3}\.\d{1,3}|10\.\d{1,3}\.\d{1,3}\.\d{1,3}|172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}):(3005|3006)$/.test(
+            origin,
+          )
+        ) {
+          return cb(null, true);
+        }
+        return cb(null, false);
+      },
       credentials: true,
     }),
   );

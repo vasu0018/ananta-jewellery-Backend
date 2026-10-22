@@ -11,6 +11,7 @@ import { invoicePdf, shippingLabelPdf } from "../../lib/pdf";
 import { sendExport, type Column } from "../../lib/export";
 import { num, round2, serialize } from "../../lib/utils";
 import { addressSchema } from "../store";
+import { phoneSchema } from "../../lib/phone";
 
 const router = Router();
 const read = requirePerm("orders.read");
@@ -156,7 +157,7 @@ const manualAddress = addressSchema.omit({ type: true, isDefault: true });
 const manualSchema = z.object({
   customerId: z.string().optional().nullable(),
   email: z.string().trim().toLowerCase().email(),
-  phone: z.string().trim().regex(/^[6-9]\d{9}$/, "Enter a valid 10-digit mobile number"),
+  phone: phoneSchema,
   customerName: z.string().trim().min(2).max(80),
   items: z.array(z.object({ variantId: z.string(), quantity: z.number().int().min(1).max(50) })).min(1).max(50),
   couponCode: z.string().trim().max(40).optional().nullable(),
@@ -285,7 +286,7 @@ router.patch("/orders/:id", write, async (req, res) => {
       internalNote: z.string().max(2000).optional().nullable(),
       giftMessage: z.string().max(300).optional().nullable(),
       shippingAddress: manualAddress.optional(),
-      phone: z.string().regex(/^[6-9]\d{9}$/).optional(),
+      phone: phoneSchema.optional(),
     }),
     req.body,
   );

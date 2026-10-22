@@ -103,7 +103,7 @@ router.post("/content/contact", authLimiter, async (req, res) => {
     z.object({
       name: z.string().trim().min(2).max(80),
       email: z.string().trim().email(),
-      phone: z.string().max(20).optional(),
+      phone: z.string().trim().max(24).optional(),
       subject: z.string().max(120).optional(),
       message: z.string().trim().min(10).max(3000),
     }),

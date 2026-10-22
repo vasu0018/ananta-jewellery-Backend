@@ -11,6 +11,7 @@ import { changeOrderStatus, STATUS_LABEL } from "../lib/orders";
 import { invoicePdf } from "../lib/pdf";
 import { storeUpload } from "../lib/storage";
 import { serialize } from "../lib/utils";
+import { phoneSchema } from "../lib/phone";
 
 const router = Router();
 router.use(["/cart", "/wishlist", "/account", "/uploads"], requireCustomer);
@@ -122,7 +123,7 @@ router.patch("/account/profile", async (req, res) => {
   const body = parse(
     z.object({
       name: z.string().trim().min(2).max(80).optional(),
-      phone: z.string().trim().regex(/^[6-9]\d{9}$/, "Enter a valid mobile number").optional().nullable(),
+      phone: phoneSchema.optional().nullable(),
       dateOfBirth: z.coerce.date().optional().nullable(),
       anniversary: z.coerce.date().optional().nullable(),
       gender: z.string().max(20).optional().nullable(),
@@ -159,7 +160,7 @@ router.get("/account/loyalty", async (req, res) => {
 
 export const addressSchema = z.object({
   name: z.string().trim().min(2).max(80),
-  phone: z.string().trim().regex(/^[6-9]\d{9}$/, "Enter a valid 10-digit mobile number"),
+  phone: phoneSchema,
   line1: z.string().trim().min(3).max(200),
   line2: z.string().trim().max(200).optional().nullable(),
   landmark: z.string().trim().max(120).optional().nullable(),

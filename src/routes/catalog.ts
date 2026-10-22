@@ -24,8 +24,40 @@ async function categoryScope(slugs: string[]) {
  * Builds the Prisma where-clause for storefront listing/search from query params.
  * With `scopeOnly`, the shopper-selectable attribute filters are skipped (facet scope).
  */
+/** Silver = unplated silver. Gold = 9K/14K/18K or lab-grown, not plated. Demifine = plated. */
+function storeWhere(store: string | undefined): Prisma.ProductWhereInput | null {
+  if (store === "silver") {
+    return {
+      AND: [
+        { material: { contains: "Silver", mode: "insensitive" } },
+        { NOT: { material: { contains: "Plated", mode: "insensitive" } } },
+      ],
+    };
+  }
+  if (store === "gold") {
+    return {
+      AND: [
+        { NOT: { material: { contains: "Plated", mode: "insensitive" } } },
+        {
+          OR: [
+            { material: { contains: "14K", mode: "insensitive" } },
+            { material: { contains: "18K", mode: "insensitive" } },
+            { material: { contains: "9K", mode: "insensitive" } },
+            { material: { contains: "22K", mode: "insensitive" } },
+            { stone: { contains: "Lab Grown", mode: "insensitive" } },
+          ],
+        },
+      ],
+    };
+  }
+  if (store === "demifine") return { material: { contains: "Plated", mode: "insensitive" } };
+  return null;
+}
+
 async function listingWhere(req: Request, scopeOnly = false): Promise<Prisma.ProductWhereInput> {
   const and: Prisma.ProductWhereInput[] = [{ status: "ACTIVE" }];
+  const store = storeWhere(queryString(req, "store"));
+  if (store) and.push(store);
   const q = queryString(req, "q");
   if (q) {
     const terms = q.split(/\s+/).filter(Boolean).slice(0, 6);

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { z } from "zod";
+import { phoneSchema } from "../lib/phone";
 import { prisma } from "../lib/prisma";
 import { badRequest, parse, unauthorized } from "../lib/http";
 import {
@@ -53,11 +54,9 @@ const registerSchema = z.object({
   name: z.string().trim().min(2).max(80),
   email: z.string().trim().toLowerCase().email(),
   phone: z
-    .string()
-    .trim()
-    .regex(/^[6-9]\d{9}$/, "Enter a valid 10-digit mobile number")
+    .union([z.literal(""), phoneSchema])
     .optional()
-    .or(z.literal("").transform(() => undefined)),
+    .transform((value) => value || undefined),
   password: z.string().min(8, "Password must be at least 8 characters").max(100),
   acceptsMarketing: z.boolean().optional(),
 });

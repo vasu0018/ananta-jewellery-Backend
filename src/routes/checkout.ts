@@ -10,6 +10,7 @@ import { createRazorpayOrder, verifyPaymentSignature, verifyWebhookSignature } f
 import { getSetting } from "../lib/settings";
 import { num, serialize } from "../lib/utils";
 import { addressSchema } from "./store";
+import { phoneSchema } from "../lib/phone";
 
 const router = Router();
 
@@ -53,7 +54,7 @@ router.get("/offers", async (_req, res) => {
 const placeSchema = quoteSchema.extend({
   paymentMethod: z.enum(["RAZORPAY", "COD"]),
   email: z.string().trim().toLowerCase().email(),
-  phone: z.string().trim().regex(/^[6-9]\d{9}$/, "Enter a valid 10-digit mobile number"),
+  phone: phoneSchema,
   shippingAddress: addressSchema.omit({ type: true, isDefault: true }),
   billingAddress: addressSchema.omit({ type: true, isDefault: true }).optional().nullable(),
   giftMessage: z.string().max(300).optional().nullable(),

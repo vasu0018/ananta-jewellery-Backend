@@ -8,6 +8,7 @@ import { logActivity } from "../../lib/audit";
 import { registerCrud } from "../../lib/crud";
 import { sendExport } from "../../lib/export";
 import { num, round2, serialize } from "../../lib/utils";
+import { phoneSchema } from "../../lib/phone";
 
 const router = Router();
 const read = requirePerm("customers.read");
@@ -180,7 +181,7 @@ router.get("/customers/:id", read, async (req, res) => {
 const customerUpdate = z.object({
   name: z.string().trim().min(2).max(80).optional(),
   email: z.string().trim().toLowerCase().email().optional(),
-  phone: z.string().trim().regex(/^[6-9]\d{9}$/).optional().nullable(),
+  phone: phoneSchema.optional().nullable(),
   notes: z.string().max(5000).optional().nullable(),
   tags: z.array(z.string().trim().min(1).max(30)).max(30).optional(),
   groupId: z.string().optional().nullable(),
