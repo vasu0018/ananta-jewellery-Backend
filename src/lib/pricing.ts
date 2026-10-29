@@ -150,10 +150,11 @@ function rateApplies(rate: ShippingRate, subtotal: number, weightGrams: number) 
  * the storefront cart/checkout, order placement and admin manual orders.
  */
 export async function buildQuote(input: QuoteInput, db: Tx = prisma) {
-  const [checkout, loyaltyCfg, payments] = await Promise.all([
+  const [checkout, loyaltyCfg, payments, store] = await Promise.all([
     getSetting("checkout"),
     getSetting("loyalty"),
     getSetting("payments"),
+    getSetting("store"),
   ]);
   const warnings: string[] = [];
 
@@ -306,6 +307,22 @@ export async function buildQuote(input: QuoteInput, db: Tx = prisma) {
       return s + (taxable - taxable / (1 + l.taxRate / 100));
     }, 0),
   );
+  const taxRates = [...new Set(lines.map((l) => l.taxRate))];
+  const rate = taxRates.length === 1 ? taxRates[0] : null;
+  const intra = !!input.state?.trim() && input.state.trim().toLowerCase() === store.state.trim().toLowerCase();
+  const cgst = intra ? round2(taxTotal / 2) : 0;
+  const tax = {
+    inclusive: true,
+    total: taxTotal,
+    /** One rate when every line shares it (jewellery is usually 3%). */
+    rate,
+    /** True once a delivery state is known, so CGST/SGST vs IGST can be shown. */
+    known: !!input.state?.trim(),
+    intraState: !!input.state?.trim() && intra,
+    cgst,
+    sgst: intra ? round2(taxTotal - cgst) : 0,
+    igst: intra ? 0 : taxTotal,
+  };
 
   const mrpSavings = lines.reduce((s, l) => s + ((l.compareAtPrice ?? l.unitPrice) - l.unitPrice) * l.quantity, 0);
 
@@ -335,6 +352,7 @@ export async function buildQuote(input: QuoteInput, db: Tx = prisma) {
       value: loyaltyValue,
     },
     taxTotal,
+    tax,
     total,
     savings: round2(mrpSavings + discount),
     weight,

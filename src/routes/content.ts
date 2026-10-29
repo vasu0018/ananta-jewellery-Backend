@@ -128,6 +128,63 @@ router.post("/content/track", async (req, res) => {
   res.status(204).end();
 });
 
+const STATE_ALIASES: Record<string, string> = {
+  orissa: "Odisha",
+  pondicherry: "Puducherry",
+  "nct of delhi": "Delhi",
+  "jammu & kashmir": "Jammu and Kashmir",
+  "jammu and kashmir": "Jammu and Kashmir",
+  "andaman & nicobar islands": "Andaman and Nicobar Islands",
+  "dadra and nagar haveli": "Dadra and Nagar Haveli and Daman and Diu",
+  "dadra & nagar haveli": "Dadra and Nagar Haveli and Daman and Diu",
+  "daman and diu": "Dadra and Nagar Haveli and Daman and Diu",
+  "daman & diu": "Dadra and Nagar Haveli and Daman and Diu",
+};
+
+const CANONICAL_STATES = [
+  "Andaman and Nicobar Islands", "Andhra Pradesh", "Arunachal Pradesh", "Assam", "Bihar", "Chandigarh", "Chhattisgarh",
+  "Dadra and Nagar Haveli and Daman and Diu", "Delhi", "Goa", "Gujarat", "Haryana", "Himachal Pradesh", "Jammu and Kashmir",
+  "Jharkhand", "Karnataka", "Kerala", "Ladakh", "Lakshadweep", "Madhya Pradesh", "Maharashtra", "Manipur", "Meghalaya",
+  "Mizoram", "Nagaland", "Odisha", "Puducherry", "Punjab", "Rajasthan", "Sikkim", "Tamil Nadu", "Telangana", "Tripura",
+  "Uttar Pradesh", "Uttarakhand", "West Bengal",
+];
+
+function matchState(raw: string) {
+  const key = raw.toLowerCase().replace(/&/g, "and").replace(/\s+/g, " ").trim();
+  return STATE_ALIASES[key] ?? CANONICAL_STATES.find((s) => s.toLowerCase() === key) ?? raw;
+}
+
+type Places = { city: string; state: string; localities: string[] };
+const placeCache = new Map<string, { at: number; places: Places | null }>();
+
+/** India Post directory: city, state and post-office areas for a 6-digit pincode. */
+async function lookupPlaces(pincode: string): Promise<Places | null> {
+  const hit = placeCache.get(pincode);
+  if (hit && Date.now() - hit.at < 60 * 60_000) return hit.places;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 4000);
+  let places: Places | null = null;
+  try {
+    const res = await fetch(`https://api.postalpincode.in/pincode/${pincode}`, { signal: ctrl.signal });
+    const body = (await res.json()) as { Status?: string; PostOffice?: { Name?: string; District?: string; State?: string }[] | null }[];
+    const offices = body?.[0]?.Status === "Success" ? body[0].PostOffice ?? [] : [];
+    if (offices.length) {
+      const localities = [...new Set(offices.map((o) => o.Name?.trim()).filter((n): n is string => !!n))].sort((a, b) => a.localeCompare(b));
+      places = {
+        city: offices[0].District?.trim() || localities[0] || "",
+        state: matchState(offices[0].State?.trim() || ""),
+        localities,
+      };
+    }
+  } catch {
+    places = null;
+  } finally {
+    clearTimeout(timer);
+  }
+  placeCache.set(pincode, { at: Date.now(), places });
+  return places;
+}
+
 /** Pincode serviceability + delivery estimate for the product page. */
 router.get("/content/pincode/:pincode", async (req, res) => {
   const pincode = param(req, "pincode");
@@ -142,11 +199,12 @@ router.get("/content/pincode/:pincode", async (req, res) => {
     zones.find((z) => z.pincodes.some((p) => pincode.startsWith(p))) ?? zones.find((z) => z.states.length === 0 && z.pincodes.length === 0);
   const rate = quote?.shippingOptions[0] ?? (zone?.rates[0] ? { minDays: zone.rates[0].minDays, maxDays: zone.rates[0].maxDays, codAvailable: zone.rates[0].codAvailable, price: Number(zone.rates[0].price) } : null);
   if (!rate) {
-    res.json({ serviceable: false, message: "Sorry, we don't deliver to this pincode yet." });
+    res.json({ serviceable: false, message: "Sorry, we don't deliver to this pincode yet.", places: await lookupPlaces(pincode) });
     return;
   }
   const shipping = await getSetting("shipping");
   const eta = addDays(new Date(), rate.maxDays + shipping.processingDays);
+  const places = await lookupPlaces(pincode);
   res.json({
     serviceable: true,
     codAvailable: rate.codAvailable,
@@ -155,6 +213,7 @@ router.get("/content/pincode/:pincode", async (req, res) => {
     estimatedDelivery: eta,
     shippingFee: rate.price,
     message: `Delivery by ${eta.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })}`,
+    places,
   });
 });
 
