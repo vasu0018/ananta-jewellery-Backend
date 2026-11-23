@@ -2,12 +2,133 @@ import { Router } from "express";
 import { z } from "zod";
 import { prisma } from "../lib/prisma";
 import { notFound, pageArgs, pageMeta, param, parse, queryString } from "../lib/http";
+import { env } from "../config/env";
 import { getRazorpayConfig, getSetting } from "../lib/settings";
 import { authLimiter } from "../middleware/rateLimit";
 import { buildQuote } from "../lib/pricing";
 import { addDays } from "../lib/utils";
 
 const router = Router();
+
+function digitsPhone(phone: string) {
+  const digits = phone.replace(/\D/g, "");
+  if (digits.length === 10) return `+91${digits}`;
+  if (digits.startsWith("91") && digits.length === 12) return `+${digits}`;
+  return digits ? `+${digits}` : phone;
+}
+
+function publicUrl(pathOrUrl: string, host: string | undefined) {
+  const raw = /^https?:\/\//i.test(pathOrUrl)
+    ? pathOrUrl
+    : `${env.STOREFRONT_URL.replace(/\/$/, "")}${pathOrUrl.startsWith("/") ? pathOrUrl : `/${pathOrUrl}`}`;
+  try {
+    const url = new URL(raw);
+    if ((url.hostname === "localhost" || url.hostname === "127.0.0.1") && host && host !== "localhost" && host !== "127.0.0.1") {
+      url.hostname = host;
+    }
+    return url.toString().replace(/\/$/, "");
+  } catch {
+    return raw;
+  }
+}
+
+/**
+ * Mobile app bootstrap. Same envelope the app expects:
+ * { statusCode, success, message, data, timestamp }.
+ * Values come from store settings, not placeholder copy.
+ */
+router.get("/config", async (req, res) => {
+  const [store, checkout, loyalty, payments, app, rzp] = await Promise.all([
+    getSetting("store"),
+    getSetting("checkout"),
+    getSetting("loyalty"),
+    getSetting("payments"),
+    getSetting("app"),
+    getRazorpayConfig(),
+  ]);
+  const supportEmail = store.email;
+  const supportMobile = digitsPhone(store.phone);
+  const host = req.hostname;
+  const downloadUrl = app.androidStoreUrl || app.iosStoreUrl || publicUrl("/", host);
+  res.json({
+    statusCode: 200,
+    success: true,
+    message: "App configuration fetched successfully",
+    data: {
+      branding: {
+        business_name: store.name,
+        business_logo: store.logoUrl ? publicUrl(store.logoUrl, host) : publicUrl("/icon", host),
+        tagline: store.tagline,
+        announcement: store.announcement,
+        support_email: supportEmail,
+        business_contact_phone: supportMobile,
+        whatsapp: digitsPhone(store.whatsapp),
+        address: {
+          line: store.address,
+          city: store.city,
+          state: store.state,
+          pincode: store.pincode,
+          country: store.country,
+        },
+        social: store.social,
+        maintenance_mode: app.maintenanceMode,
+      },
+      app_versions: {
+        min_version: app.minVersion,
+        latest_version: app.latestVersion,
+        force_update: app.forceUpdate,
+        app_download_url: downloadUrl,
+        android_store_url: app.androidStoreUrl || null,
+        ios_store_url: app.iosStoreUrl || null,
+      },
+      legal: {
+        privacy_policy_url: publicUrl("/policies/privacy", host),
+        terms_conditions_url: publicUrl("/policies/terms", host),
+        help_support_url: publicUrl("/contact", host),
+        faq_url: publicUrl("/faq", host),
+      },
+      locale: {
+        default_language: app.defaultLanguage,
+        supported_languages: app.supportedLanguages,
+        currency: store.currency,
+        timezone: store.timezone,
+      },
+      ios_iap_enabled: app.iosIapEnabled,
+      razorpay_enabled: payments.razorpay.enabled,
+      razorpay_key_id: rzp.mock ? null : rzp.keyId,
+      razorpay_mock: rzp.mock,
+      subscription_enabled: app.subscriptionEnabled,
+      support_email: supportEmail,
+      support_mobile: supportMobile,
+      payments: {
+        methods: {
+          upi: payments.methods.upi,
+          card: payments.methods.card,
+          netbanking: payments.methods.netbanking,
+          wallet: payments.methods.wallet,
+          cod: checkout.codEnabled && payments.methods.cod,
+        },
+        cod_fee: checkout.codFee,
+        cod_max_order_value: checkout.codMaxOrderValue,
+      },
+      checkout: {
+        free_shipping_above: checkout.freeShippingAbove,
+        gift_wrap_fee: checkout.giftWrapFee,
+        guest_checkout: checkout.guestCheckout,
+        min_order_value: checkout.minOrderValue,
+      },
+      loyalty: {
+        enabled: loyalty.enabled,
+        point_value: loyalty.pointValue,
+        earn_per_100: loyalty.earnPer100,
+        signup_bonus: loyalty.signupBonus,
+        max_redeem_percent: loyalty.maxRedeemPercent,
+      },
+      plans: [],
+    },
+    timestamp: new Date().toISOString(),
+  });
+});
 
 /** Public store configuration for the storefront & admin login screen. */
 router.get("/settings/public", async (_req, res) => {

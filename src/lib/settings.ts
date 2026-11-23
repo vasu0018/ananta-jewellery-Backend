@@ -92,6 +92,20 @@ export const SETTING_DEFAULTS = {
     packageHeight: 5,
     processingDays: 1,
   },
+  app: {
+    maintenanceMode: false,
+    forceUpdate: false,
+    minVersion: "1.0.0",
+    latestVersion: "1.0.0",
+    /** Play Store / App Store listing. Empty until the apps are published. */
+    androidStoreUrl: "",
+    iosStoreUrl: "",
+    defaultLanguage: "en",
+    supportedLanguages: ["en", "hi", "gu"],
+    /** Physical jewellery is sold with Razorpay / COD, not App Store in-app purchase. */
+    iosIapEnabled: false,
+    subscriptionEnabled: false,
+  },
   seo: {
     defaultTitle: "Ananta Jewellery — Silver & Lab-Grown Diamond Jewellery",
     defaultDescription:

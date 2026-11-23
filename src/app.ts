@@ -9,6 +9,7 @@ import { env } from "./config/env";
 import { prisma } from "./lib/prisma";
 import { apiLimiter } from "./middleware/rateLimit";
 import { errorHandler, notFoundHandler } from "./middleware/error";
+import swaggerUi from "swagger-ui-express";
 import authRoutes from "./routes/auth";
 import catalogRoutes from "./routes/catalog";
 import storeRoutes from "./routes/store";
@@ -16,6 +17,8 @@ import checkoutRoutes, { razorpayWebhook } from "./routes/checkout";
 import contentRoutes from "./routes/content";
 import adminRoutes from "./routes/admin";
 import { shippingWebhook } from "./routes/admin/shipping";
+import { openApiSpec } from "./docs/openapi";
+import { withAbsoluteMedia } from "./lib/storage";
 
 export function createApp() {
   const app = express();
@@ -62,6 +65,28 @@ export function createApp() {
     "/uploads",
     express.static(path.resolve(process.cwd(), env.UPLOAD_DIR), { maxAge: "30d", immutable: true, fallthrough: false }),
   );
+
+  app.get(["/openapi.json", "/api/v1/openapi.json"], (_req, res) => {
+    res.json(openApiSpec);
+  });
+  app.use(
+    "/docs",
+    swaggerUi.serve,
+    swaggerUi.setup(openApiSpec, {
+      customSiteTitle: "Ananta Jewellery API",
+      swaggerOptions: { persistAuthorization: true, displayRequestDuration: true, docExpansion: "list", tagsSorter: "alpha" },
+    }),
+  );
+  app.get(["/swagger", "/api-docs"], (_req, res) => res.redirect("/docs"));
+
+  app.use("/api", (req, res, next) => {
+    if (req.originalUrl.startsWith("/api/v1/admin") || req.path.includes("openapi.json")) return next();
+    const host = req.get("host");
+    const origin = host ? `${req.protocol}://${host}` : env.API_PUBLIC_URL.replace(/\/$/, "");
+    const send = res.json.bind(res);
+    res.json = (body) => send(withAbsoluteMedia(body, origin));
+    next();
+  });
 
   app.get("/api/v1/health", async (_req, res) => {
     await prisma.$queryRaw`SELECT 1`;

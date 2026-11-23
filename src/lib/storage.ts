@@ -116,8 +116,27 @@ export async function storeUpload(
 }
 
 /** Absolute URL for media referenced in emails / PDFs. */
-export function absoluteUrl(url?: string | null) {
+export function absoluteUrl(url?: string | null, origin = env.API_PUBLIC_URL) {
   if (!url) return "";
   if (/^https?:\/\//.test(url)) return url;
-  return `${env.API_PUBLIC_URL.replace(/\/$/, "")}${url.startsWith("/") ? "" : "/"}${url}`;
+  const base = origin.replace(/\/$/, "");
+  return `${base}${url.startsWith("/") ? "" : "/"}${url}`;
+}
+
+/** Turn stored `/uploads/...` paths into absolute URLs for API clients. */
+export function withAbsoluteMedia<T>(value: T, origin: string): T {
+  if (typeof value === "string") {
+    if (/^\/uploads\/\S+$/.test(value)) return absoluteUrl(value, origin) as T;
+    if (value.includes('"/uploads/') || value.includes("'/uploads/")) {
+      return value.replace(/(["'])\/uploads\//g, `$1${origin.replace(/\/$/, "")}/uploads/`) as T;
+    }
+    return value;
+  }
+  if (Array.isArray(value)) return value.map((item) => withAbsoluteMedia(item, origin)) as T;
+  if (value instanceof Date || value === null || typeof value !== "object") return value;
+  const out: Record<string, unknown> = {};
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+    out[key] = withAbsoluteMedia(item, origin);
+  }
+  return out as T;
 }

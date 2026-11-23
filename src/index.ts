@@ -34,6 +34,7 @@ async function main() {
   const app = createApp();
   const server = app.listen(env.PORT, () => {
     console.log(`✦ Ananta Jewellery API ready on ${env.API_PUBLIC_URL} (port ${env.PORT}, ${env.NODE_ENV})`);
+    console.log(`  Swagger docs: ${env.API_PUBLIC_URL.replace(/\/$/, "")}/docs`);
   });
 
   const timers =

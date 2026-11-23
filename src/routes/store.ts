@@ -144,8 +144,8 @@ router.post("/account/password", async (req, res) => {
   }
   await prisma.customer.update({ where: { id: c.id }, data: { passwordHash: await hashPassword(body.newPassword) } });
   await prisma.refreshToken.deleteMany({ where: { customerId: c.id } });
-  await issueRefreshToken(req, res, "customer", c.id);
-  res.json({ ok: true });
+  const refreshToken = await issueRefreshToken(req, res, "customer", c.id);
+  res.json({ ok: true, refreshToken });
 });
 
 router.get("/account/loyalty", async (req, res) => {

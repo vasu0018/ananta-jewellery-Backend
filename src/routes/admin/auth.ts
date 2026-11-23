@@ -54,16 +54,16 @@ router.post("/login", authLimiter, async (req, res) => {
   if (!row || !(await verifyPassword(body.password, row.passwordHash))) throw unauthorized("Invalid email or password");
   if (!row.isActive) throw unauthorized("Your account has been disabled");
   await prisma.adminUser.update({ where: { id: row.id }, data: { lastLoginAt: new Date() } });
-  await issueRefreshToken(req, res, "admin", row.id);
+  const refreshToken = await issueRefreshToken(req, res, "admin", row.id);
   req.admin = { sub: row.id, typ: "admin" };
   await logActivity(req, "auth.login", "AdminUser", row.id, `${row.name} signed in`);
-  res.json({ accessToken: tokenFor(row), user: present(row) });
+  res.json({ accessToken: tokenFor(row), refreshToken, user: present(row) });
 });
 
 router.post("/refresh", async (req, res) => {
-  const id = await rotateRefreshToken(req, res, "admin");
+  const { id, refreshToken } = await rotateRefreshToken(req, res, "admin");
   const admin = await loadAdmin(id);
-  res.json({ accessToken: tokenFor(admin), user: present(admin) });
+  res.json({ accessToken: tokenFor(admin), refreshToken, user: present(admin) });
 });
 
 router.post("/logout", async (req, res) => {

@@ -89,8 +89,11 @@ export async function issueRefreshToken(
  * Re-use of a revoked token revokes the whole family for that owner.
  */
 export async function rotateRefreshToken(req: Request, res: Response, typ: Principal) {
+  // Prefer an explicit body token (web localStorage / native) over the cookie so a
+  // stale cookie cannot win and trigger family revocation on token reuse.
   const raw: string | undefined =
-    req.cookies?.[REFRESH_COOKIE[typ]] || (req.body && req.body.refreshToken);
+    (req.body && typeof req.body.refreshToken === "string" && req.body.refreshToken) ||
+    req.cookies?.[REFRESH_COOKIE[typ]];
   if (!raw) throw unauthorized("No refresh token");
   const row = await prisma.refreshToken.findUnique({ where: { tokenHash: sha256(raw) } });
   const ownerId = typ === "admin" ? row?.adminId : row?.customerId;
@@ -104,12 +107,14 @@ export async function rotateRefreshToken(req: Request, res: Response, typ: Princ
   }
   if (row.expiresAt < new Date()) throw unauthorized("Refresh token expired");
   await prisma.refreshToken.update({ where: { id: row.id }, data: { revokedAt: new Date() } });
-  await issueRefreshToken(req, res, typ, ownerId);
-  return ownerId;
+  const refreshToken = await issueRefreshToken(req, res, typ, ownerId);
+  return { id: ownerId, refreshToken };
 }
 
 export async function revokeRefreshToken(req: Request, res: Response, typ: Principal) {
-  const raw: string | undefined = req.cookies?.[REFRESH_COOKIE[typ]];
+  const raw: string | undefined =
+    (typeof req.body?.refreshToken === "string" && req.body.refreshToken) ||
+    req.cookies?.[REFRESH_COOKIE[typ]];
   if (raw) {
     await prisma.refreshToken.updateMany({
       where: { tokenHash: sha256(raw), revokedAt: null },

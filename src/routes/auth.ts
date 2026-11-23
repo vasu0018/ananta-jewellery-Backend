@@ -96,9 +96,9 @@ router.post("/register", authLimiter, async (req, res) => {
     },
     select: customerSelect,
   });
-  await issueRefreshToken(req, res, "customer", customer.id);
+  const refreshToken = await issueRefreshToken(req, res, "customer", customer.id);
   void sendTemplate("WELCOME", customer.email, { customerName: customer.name, points: customer.loyaltyPoints });
-  res.status(201).json({ accessToken: tokenFor(customer), customer });
+  res.status(201).json({ accessToken: tokenFor(customer), refreshToken, customer });
 });
 
 router.post("/login", authLimiter, async (req, res) => {
@@ -112,16 +112,16 @@ router.post("/login", authLimiter, async (req, res) => {
   if (row.isBlocked) throw unauthorized("This account has been suspended. Please contact support.");
   await prisma.customer.update({ where: { id: row.id }, data: { lastLoginAt: new Date() } });
   const customer = await prisma.customer.findUniqueOrThrow({ where: { id: row.id }, select: customerSelect });
-  await issueRefreshToken(req, res, "customer", customer.id);
-  res.json({ accessToken: tokenFor(customer), customer });
+  const refreshToken = await issueRefreshToken(req, res, "customer", customer.id);
+  res.json({ accessToken: tokenFor(customer), refreshToken, customer });
 });
 
 router.post("/refresh", async (req, res) => {
-  const id = await rotateRefreshToken(req, res, "customer");
+  const { id, refreshToken } = await rotateRefreshToken(req, res, "customer");
   const customer = await prisma.customer.findUnique({ where: { id }, select: { ...customerSelect, isBlocked: true } });
   if (!customer || customer.isBlocked) throw unauthorized();
   const { isBlocked: _b, ...safe } = customer;
-  res.json({ accessToken: tokenFor(safe), customer: safe });
+  res.json({ accessToken: tokenFor(safe), refreshToken, customer: safe });
 });
 
 router.post("/logout", async (req, res) => {
